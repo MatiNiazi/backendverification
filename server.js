@@ -14,11 +14,6 @@ app.use(cors());
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Route to handle the root URL ("/")
-app.get('/', (req, res) => {
-  res.send('Welcome to the Backend Verification API! Send POST requests to /upload to use the service.');
-});
-
 // Upload image endpoint
 app.post('/upload', upload.single('image'), async (req, res) => {
   try {
@@ -31,6 +26,7 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     // Extract roll number, exam type, and year from OCR results
     const rollNoItem = ocrResults[0].prediction.find(item => item.label === 'roll_no');
     const rollNo = rollNoItem ? rollNoItem.ocr_text : '';
+
     const examTypeItem = ocrResults[0].prediction.find(item => item.label === 'examination');
     const examType = examTypeItem ? examTypeItem.ocr_text : '';
     let examSelectorValue = '';
@@ -91,7 +87,7 @@ app.post('/upload', upload.single('image'), async (req, res) => {
       totalMarks: totalMarks,
       marksComparison: marksComparison,
     });
-
+    
   } catch (error) {
     console.error(error);
     res.status(500).send('Internal Server Error');
@@ -131,12 +127,15 @@ const performOCR = async (imageBuffer) => {
 
 // Fetch results from Sargodha Board website using web scraping
 const fetchResultsSargodhaBoard = async (rollNo, examType, year) => {
-  const browser = await puppeteer.launch({ headless: false, executablePath: 'C://Program Files//Google//Chrome//Application//chrome.exe', });
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser', // Use Render's Chromium
+  });
   const page = await browser.newPage();
   const url = 'https://www.bisesargodha.edu.pk/content/boardresult.aspx';
 
   await page.goto(url);
-
+  
   await page.select('select[name="ctl00$ContentPlaceHolder1$DDLExam"]', examType);
 
   await page.waitForSelector('select[name="ctl00$ContentPlaceHolder1$DDLExamYear"]');
@@ -164,7 +163,10 @@ const fetchResultsSargodhaBoard = async (rollNo, examType, year) => {
 
 // Fetch results from Lahore Board website using web scraping
 const fetchResultsLahoreBoard = async (rollNo, educationSystem, year) => {
-  const browser = await puppeteer.launch({ headless: true, executablePath: 'C://Program Files//Google//Chrome//Application//chrome.exe', });
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser', // Use Render's Chromium
+  });
   const page = await browser.newPage();
   const url = 'http://result.biselahore.com/';
 
@@ -203,8 +205,8 @@ const fetchResultsLahoreBoard = async (rollNo, educationSystem, year) => {
 // Fetch results from Gujranwala Board website using web scraping
 const fetchResultsGujranwalaBoard = async (rollNo, examType, year) => {
   const browser = await puppeteer.launch({
-    headless: false,
-    executablePath: 'C://Program Files//Google//Chrome//Application//chrome.exe',
+    headless: true,
+    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser', // Use Render's Chromium
   });
   const page = await browser.newPage();
   const url = "https://www.bisegrw.edu.pk/prev-years-result.html";
@@ -219,45 +221,21 @@ const fetchResultsGujranwalaBoard = async (rollNo, examType, year) => {
     await page.select('select[name="class"]', '12');
   }
 
-  await page.type('input[name="rno"]', rollNo);
+  await page.type('input[name="roll_number"]', rollNo);
 
-  // Extract captcha text
-  const captchaText = await page.evaluate(() => {
-    const captchaElement = document.getElementById('captchaImage');
-    return captchaElement ? captchaElement.innerText.trim() : null;
-  });
+  await page.click('#submit');
 
-  // Input captcha text into the corresponding field
-  await page.type('input[name="captcha"]', captchaText);
+  await page.waitForSelector('#div_result');
 
-  // Proceed with form submission
-  await Promise.all([
-    page.evaluate(() => {
-      document.querySelector('input[name="Submit"]').click();
-    }),
-  ]);
+  const resultText = await page.$eval('#div_result', el => el.innerText);
 
-  // Wait for the results table to load
-  await page.waitForSelector('table.tx.grid');
-
-  // Extract and return obtained marks
-  let html_source = await page.content();
-  const $ = cheerio.load(html_source);
-  const table = $('table.tx.grid');
-  const rows = table.find('tr').toArray().slice(1);
-
-  if (rows.length >= 10) {
-    const row_10 = rows[9];
-    const cells = $(row_10).find('td').toArray();
-    const marks_obtained = $(cells[5]).text().trim();
-    return marks_obtained;
-  }
-
-  return 'No result found.';
+  await browser.close();
+  
+  return resultText;
 };
 
-// Start the server
-const port = process.env.PORT || 3100;  // Render sets this dynamically
+// Server listening on port 8080
+const port = process.env.PORT || 4100;  // Render sets this dynamically
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
