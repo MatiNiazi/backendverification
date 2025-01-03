@@ -1,0 +1,17 @@
+{
+  "name": "mydvs-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "cors": "^2.8.5",
+    "mongoose": "^5.11.15",
+    "request": "^2.88.2",
+    "puppeteer": "^10.0.0",
+    "cheerio": "^1.0.0-rc.10",
+    "multer": "^1.4.2"
+  }
+}
